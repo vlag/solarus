@@ -20,7 +20,10 @@
 #include "solarus/Common.h"
 #include "solarus/lowlevel/shaders/Shader.h"
 #include <memory>
+#include <SDL.h>
+#include <SDL_opengl.h>
 #include <string>
+
 
 namespace Solarus {
 
@@ -39,7 +42,8 @@ class ShaderContext {
 
   private:
 
-    static bool shader_supported;
+    static SDL_GLContext gl_context;             /**< The OpenGL context. */
+    static bool is_arb_supported;
 };
 
 }

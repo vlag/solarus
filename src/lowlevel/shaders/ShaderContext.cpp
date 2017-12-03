@@ -15,14 +15,20 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 #include "solarus/lowlevel/shaders/ShaderContext.h"
-#include "solarus/lowlevel/shaders/GLContext.h"
 #include "solarus/lowlevel/shaders/GL_ARBShader.h"
 #include "solarus/lowlevel/shaders/GL_2DShader.h"
+#include "solarus/lowlevel/Logger.h"
+#include "solarus/lowlevel/QuestFiles.h"
+#include "solarus/lowlevel/Video.h"
+#include "solarus/lua/LuaContext.h"
+#include "solarus/lua/LuaTools.h"
+#include <string>
 
 
 namespace Solarus {
 
-bool ShaderContext::shader_supported = false;
+SDL_GLContext ShaderContext::gl_context = nullptr;
+bool ShaderContext::is_arb_supported = false;
 
 /**
  * \brief Initializes the shader system.
@@ -30,9 +36,37 @@ bool ShaderContext::shader_supported = false;
  */
 bool ShaderContext::initialize() {
 
-  shader_supported = GLContext::initialize();
+  const char* opengl_version = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+  const char* shading_language_version = reinterpret_cast<const char *>(glGetString(GL_SHADING_LANGUAGE_VERSION));
+  const char* opengl_vendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
+  const char* opengl_renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
 
-  return shader_supported;
+  Logger::info(std::string("OpenGL: ") + opengl_version);
+  Logger::info(std::string("OpenGL vendor: ") + opengl_vendor);
+  Logger::info(std::string("OpenGL renderer: ") + opengl_renderer);
+  Logger::info(std::string("OpenGL shading language: ") + shading_language_version);
+
+  SDL_GL_SetAttribute(SDL_GL_SHARE_WITH_CURRENT_CONTEXT, 1);
+  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+
+  if (!(gl_context = SDL_GL_CreateContext(Video::get_window()))) {
+    Debug::warning("Unable to create OpenGL context : " + std::string(SDL_GetError()));
+    return false;
+  }
+
+  // Setting some parameters
+  glEnable(GL_DEPTH_TEST); // The type of depth test to do.
+  glDepthFunc(GL_LESS); // Enables depth testing.
+
+  // Use late swap tearing, or try to use the classic swap interval (aka VSync) if not supported.
+  if (SDL_GL_SetSwapInterval(-1) == -1) {
+    SDL_GL_SetSwapInterval(1);
+  }
+
+  // Try to initialize a gl shader system, in order from the earlier to the older.
+  is_arb_supported = GL_ARBShader::initialize();
+
+  return is_arb_supported || GL_2DShader::initialize();
 }
 
 /**
@@ -40,8 +74,8 @@ bool ShaderContext::initialize() {
  */
 void ShaderContext::quit() {
 
-  if (shader_supported) {
-    GLContext::quit();
+  if (gl_context) {
+    SDL_GL_DeleteContext(gl_context);
   }
 }
 
@@ -54,7 +88,7 @@ std::unique_ptr<Shader> ShaderContext::create_shader(const std::string& shader_i
 
   std::unique_ptr<Shader> shader = nullptr;
 
-  if (true) {  // TODO
+  if (is_arb_supported) {
     shader = std::unique_ptr<Shader>(new GL_ARBShader(shader_id));
   }
   else {
